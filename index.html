@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rustam Magic AI - Offline Ledger</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f4f0; margin: 0; padding: 0; }
+        .page { display: none; padding: 15px; max-width: 500px; margin: auto; background: white; min-height: 100vh; }
+        .active { display: block; }
+        header { text-align: center; border-bottom: 2px solid #0088cc; padding-bottom: 10px; margin-bottom: 20px; }
+        .bismillah { color: #1a5e1a; font-weight: bold; font-size: 16px; }
+
+        .input-row { display: flex; margin-bottom: 10px; border: 1.5px solid #bbb; border-radius: 8px; overflow: hidden; height: 50px; }
+        .label { background: #00ff00; color: black; font-weight: bold; width: 40%; display: flex; align-items: center; padding-left: 12px; font-size: 14px; border-right: 1.5px solid #bbb; }
+        input, select { width: 60%; border: none; padding: 10px; font-size: 18px; outline: none; }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+        .btn { padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .btn-save { background: #27ae60; color: white; }
+        .btn-edit { background: #f1c40f; color: black; }
+        .btn-search { background: #3498db; color: white; }
+        .btn-clear { background: #e67e22; color: white; }
+        .btn-view { background: #2c3e50; color: white; width: 100%; margin-top: 25px; height: 55px; border-radius: 10px; }
+
+        #toast {
+            visibility: hidden; min-width: 280px; background-color: #333; color: #fff;
+            text-align: center; border-radius: 10px; padding: 16px; position: fixed;
+            z-index: 1000; left: 50%; bottom: 30px; transform: translateX(-50%);
+        }
+        #toast.show { visibility: visible; animation: fadeInOut 2.5s; }
+        @keyframes fadeInOut { 0% { bottom: 0; opacity: 0; } 20% { bottom: 30px; opacity: 1; } 80% { bottom: 30px; opacity: 1; } 100% { bottom: 0; opacity: 0; } }
+
+        /* টেবিল ডিজাইন */
+        #table-capture { background: white; padding: 20px; }
+        .table-wrap { width: 100%; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 1000px; background: white; border: 2px solid #333; }
+        th { background: #1a5e1a; color: white; padding: 12px; border: 1px solid #333; }
+        td { border: 1px solid #444; padding: 10px; text-align: center; color: #000; font-weight: bold; }
+
+        /* হিডেন রসিদ টেমপ্লেট ডিজাইন */
+        #receipt-template {
+            position: absolute; left: -9999px; top: -9999px;
+            width: 400px; background: #fff; padding: 25px; border: 3px double #333; font-family: sans-serif;
+        }
+        .receipt-header { text-align: center; border-bottom: 2px dashed #333; padding-bottom: 10px; margin-bottom: 15px; }
+        .receipt-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 16px; border-bottom: 1px dotted #ccc; padding-bottom: 5px; }
+        .receipt-label { font-weight: bold; color: #555; }
+        .receipt-value { font-weight: bold; color: #000; }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div id="page1" class="page active">
+    <header>
+        <h2 style="margin:0; color:#0088cc;">Rustam Magic AI</h2>
+        <div class="bismillah">বিসমিল্লাহির রহমানির রাহিম</div>
+    </header>
+
+    <div class="input-row"><div class="label">সিরিয়াল নাম্বার</div><input type="number" id="serial" inputmode="numeric" placeholder="ID লিখুন"></div>
+    <div class="input-row"><div class="label">নাম</div><input type="text" id="name" placeholder="নাম লেখ"></div>
+    <div class="input-row"><div class="label">মোবাইল</div><input type="tel" id="mobile" value="+971" inputmode="tel"></div>
+    <div class="input-row"><div class="label">টাকা</div><input type="number" id="taka" inputmode="numeric" placeholder="টাকার পরিমাণ"></div>
+    <div class="input-row"><div class="label">তারিখ</div><input type="date" id="date"></div>
+    <div class="input-row"><div class="label">নগদ/বাকি</div>
+        <select id="status">
+            <option value="নগদ">নগদ</option>
+            <option value="বাকি">বাকি</option>
+        </select>
+    </div>
+    <div class="input-row"><div class="label">ব্যক্তিগত খরচ</div><input type="number" id="expense" inputmode="numeric" placeholder="খরচ লিখুন"></div>
+
+    <div class="btn-grid">
+        <button class="btn btn-save" onclick="saveData()">সেভ করুন</button>
+        <button class="btn btn-edit" onclick="updateData()">এডিট করুন</button>
+        <button class="btn btn-search" onclick="searchFromInput()">সার্চ করুন</button>
+        <button class="btn btn-clear" onclick="clearFields()">সব মুছুন</button>
+    </div>
+    <button class="btn btn-view" onclick="changePage('page2')">সেভ করা ডাটা দেখুন</button>
+</div>
+
+<div id="page2" class="page" style="max-width: 100%;">
+    <h3 style="text-align:center;">সেভ করা ডাটা শিট</h3>
+    <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
+        <button style="background:#c0392b; color:white; padding:10px 12px; border:none; border-radius:8px; font-weight:bold;" onclick="changePage('page1')">← ফিরে যান</button>
+        <button style="background:#27ae60; color:white; padding:10px 12px; border:none; border-radius:8px; font-weight:bold;" onclick="exportExcel()">📊 Excel</button>
+        <button style="background:#8e44ad; color:white; padding:10px 12px; border:none; border-radius:8px; font-weight:bold;" onclick="downloadImage()">🖼️ সম্পূর্ণ টেবিল</button>
+        <button style="background:#e67e22; color:white; padding:10px 12px; border:none; border-radius:8px; font-weight:bold;" onclick="downloadReceipt()">📄 রসিদ ডাউনলোড</button>
+    </div>
+
+    <div id="table-capture">
+        <div class="table-wrap">
+            <table id="target-table">
+                <thead>
+                    <tr><th>সিরিয়াল</th><th>নাম</th><th>মোবাইল</th><th>টাকা</th><th>তারিখ</th><th>অবস্থা</th><th>খরচ</th></tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="receipt-template">
+    <div class="receipt-header">
+        <h2 style="margin:0; color:#0088cc;">Rustam Magic AI</h2>
+        <div style="font-size:12px; color:#1a5e1a; margin-top:5px; font-weight:bold;">বিসমিল্লাহির রহমানির রাহিম</div>
+        <h4 style="margin:10px 0 0 0; background:#333; color:#fff; padding:3px; display:inline-block;">মানি রসিদ / ক্যাশ মেমো</h4>
+    </div>
+    <div class="receipt-row"><span class="receipt-label">সিরিয়াল নাম্বার:</span><span class="receipt-value" id="r-serial"></span></div>
+    <div class="receipt-row"><span class="receipt-label">নাম:</span><span class="receipt-value" id="r-name"></span></div>
+    <div class="receipt-row"><span class="receipt-label">মোবাইল:</span><span class="receipt-value" id="r-mobile"></span></div>
+    <div class="receipt-row"><span class="receipt-label">টাকা:</span><span class="receipt-value" id="r-taka"></span></div>
+    <div class="receipt-row"><span class="receipt-label">তারিখ:</span><span class="receipt-value" id="r-date"></span></div>
+    <div class="receipt-row"><span class="receipt-label">অবস্থা:</span><span class="receipt-value" id="r-status"></span></div>
+    <div class="receipt-row"><span class="receipt-label">ব্যক্তিগত খরচ:</span><span class="receipt-value" id="r-expense"></span></div>
+    <div style="text-align:center; margin-top:20px; font-size:12px; font-style:italic; color:#666;">ধন্যবাদ, আবার আসবেন।</div>
+</div>
+
+<script>
+    document.getElementById('date').valueAsDate = new Date();
+
+    function showToast(msg, color = "#333") {
+        let t = document.getElementById("toast");
+        t.innerText = msg; t.style.backgroundColor = color;
+        t.className = "show"; setTimeout(() => { t.className = ""; }, 2500);
+    }
+
+    function changePage(id) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(id === 'page2') loadTable();
+    }
+
+    function saveData() {
+        let s = document.getElementById('serial').value;
+        if(!s) { showToast("সিরিয়াল দিন!", "#e74c3c"); return; }
+        let db = JSON.parse(localStorage.getItem('rustam_db') || "[]");
+        if(db.find(x => x.serial == s)) { showToast("সিরিয়ালটি আছে!", "#e67e22"); return; }
+        
+        db.push({
+            serial: s, name: document.getElementById('name').value,
+            mobile: document.getElementById('mobile').value, taka: document.getElementById('taka').value,
+            date: document.getElementById('date').value, status: document.getElementById('status').value,
+            expense: document.getElementById('expense').value
+        });
+        localStorage.setItem('rustam_db', JSON.stringify(db));
+        showToast("✅ সেভ হয়েছে!", "#27ae60");
+        clearFields();
+    }
+
+    function searchFromInput() {
+        let s = document.getElementById('serial').value;
+        if(!s) { showToast("সার্চ করতে সিরিয়াল নাম্বার দিন!", "#e67e22"); return; }
+        let db = JSON.parse(localStorage.getItem('rustam_db') || "[]");
+        let item = db.find(x => x.serial == s);
+        
+        if(item) {
+            document.getElementById('name').value = item.name;
+            document.getElementById('mobile').value = item.mobile;
+            document.getElementById('taka').value = item.taka;
+            document.getElementById('date').value = item.date;
+            document.getElementById('status').value = item.status;
+            document.getElementById('expense').value = item.expense;
+            showToast("🔍 ডাটা খুঁজে পাওয়া গেছে!", "#3498db");
+        } else {
+            showToast("❌ এই সিরিয়ালের কোনো ডাটা নেই!", "#e74c3c");
+        }
+    }
+
+    function updateData() {
+        let s = document.getElementById('serial').value;
+        if(!s) { showToast("আপডেট করতে সিরিয়াল দিন!", "#e74c3c"); return; }
+        let db = JSON.parse(localStorage.getItem('rustam_db') || "[]");
+        let index = db.findIndex(x => x.serial == s);
+        
+        if(index !== -1) {
+            db[index] = {
+                serial: s,
+                name: document.getElementById('name').value,
+                mobile: document.getElementById('mobile').value,
+                taka: document.getElementById('taka').value,
+                date: document.getElementById('date').value,
+                status: document.getElementById('status').value,
+                expense: document.getElementById('expense').value
+            };
+            localStorage.setItem('rustam_db', JSON.stringify(db));
+            showToast("🔄 ডাটা সফলভাবে আপডেট হয়েছে!", "#f1c40f");
+            clearFields();
+        } else {
+            showToast("❌ এই সিরিয়ালের ডাটা খুঁজে পাওয়া যায়নি!", "#e74c3c");
+        }
+    }
+
+    function loadTable() {
+        let db = JSON.parse(localStorage.getItem('rustam_db') || "[]");
+        let html = "";
+        db.forEach(i => {
+            html += `<tr><td>${i.serial}</td><td>${i.name}</td><td>${i.mobile}</td><td>${i.taka}</td><td>${i.date}</td><td>${i.status}</td><td>${i.expense}</td></tr>`;
+        });
+        document.getElementById('tableBody').innerHTML = html;
+    }
+
+    function clearFields() {
+        document.getElementById('serial').value = "";
+        document.getElementById('name').value = "";
+        document.getElementById('mobile').value = "+971";
+        document.getElementById('taka').value = "";   
+        document.getElementById('expense').value = ""; 
+        document.getElementById('date').valueAsDate = new Date();
+    }
+
+    function downloadImage() {
+        showToast("পিসি মুডে ফটো রেডি হচ্ছে...", "#2980b9");
+        const area = document.getElementById('table-capture');
+        html2canvas(area, {
+            scale: 2,
+            useCORS: true,
+            windowWidth: 1600, 
+            onclone: (clonedDoc) => {
+                const cloneTable = clonedDoc.getElementById('target-table');
+                cloneTable.style.minWidth = "1500px"; 
+                const wrap = clonedDoc.querySelector('.table-wrap');
+                wrap.style.overflow = 'visible';
+            }
+        }).then(canvas => {
+            let link = document.createElement('a');
+            link.download = `Rustam_Full_Report.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+            showToast("✅ ডাউনলোড সম্পন্ন!", "#27ae60");
+        });
+    }
+
+    // নতুন ফাংশন: নির্দিষ্ট সিঙ্গেল ডাটার রসিদ বা মেমো ফটো আকারে ডাউনলোড করা
+    function downloadReceipt() {
+        let s = prompt("যে সিরিয়াল নাম্বারের রসিদ ডাউনলোড করতে চান, সেটি লিখুন:");
+        if(!s) return;
+
+        let db = JSON.parse(localStorage.getItem('rustam_db') || "[]");
+        let item = db.find(x => x.serial == s);
+
+        if(!item) {
+            showToast("❌ এই সিরিয়ালের কোনো ডাটা পাওয়া যায়নি!", "#e74c3c");
+            return;
+        }
+
+        // হিডেন রসিদ টেমপ্লেটে ডাটা পুশ করা
+        document.getElementById('r-serial').innerText = item.serial;
+        document.getElementById('r-name').innerText = item.name || "N/A";
+        document.getElementById('r-mobile').innerText = item.mobile || "N/A";
+        document.getElementById('r-taka').innerText = (item.taka || "0") + " AED/টাকা";
+        document.getElementById('r-date').innerText = item.date || "N/A";
+        document.getElementById('r-status').innerText = item.status;
+        document.getElementById('r-expense').innerText = (item.expense || "0") + " AED/টাকা";
+
+        showToast("📄 রসিদ জেনারেট হচ্ছে...", "#3498db");
+
+        // রসিদ এরিয়া ক্যাপচার করা
+        const area = document.getElementById('receipt-template');
+        
+        // সাময়িকভাবে ভিজিবল করে স্ক্রিনশট নেওয়া
+        area.style.position = "static";
+        area.style.left = "0";
+        area.style.top = "0";
+
+        html2canvas(area, { scale: 3 }).then(canvas => {
+            // আবার লুকিয়ে ফেলা
+            area.style.position = "absolute";
+            area.style.left = "-9999px";
+            area.style.top = "-9999px";
+
+            let link = document.createElement('a');
+            link.download = `Receipt_Serial_${item.serial}.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+            showToast("✅ রসিদ ডাউনলোড সম্পন্ন!", "#27ae60");
+        });
+    }
+
+    function exportExcel() {
+        let db = JSON.parse(localStorage.getItem('rustam_db') || "[]");
+        let ws = XLSX.utils.json_to_sheet(db);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data");
+        XLSX.writeFile(wb, "Rustam_Data.xlsx");
+        showToast("📊 Excel ফাইল রেডি", "#27ae60");
+    }
+</script>
+
+</body>
+</html>
